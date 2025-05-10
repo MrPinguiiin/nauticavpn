@@ -24,15 +24,20 @@ export const load: ServerLoad = async ({ request, url, fetch }) => {
     proxyList = proxyList.filter((proxy) => countrySelect.includes(proxy.country));
   }
 
-  // Generate config
+  // Generate config data
   const result = await getAllConfig(request, hostname, proxyList, pageIndex);
 
-  // Jika result adalah Response, ambil textnya
+  // Jika result adalah Response, kembalikan sebagai error
   if (result instanceof Response) {
-    const html = await result.text();
-    return { html };
+    const errorText = await result.text();
+    return { 
+      html: JSON.stringify({ 
+        error: true, 
+        message: errorText 
+      })
+    };
   }
   
-  // Jika result adalah string
+  // Jika result adalah string (data JSON), kembalikan apa adanya
   return { html: result };
 }; 
