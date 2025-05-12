@@ -1,4 +1,6 @@
 <script lang="ts">
+  const runes = true;
+  
   import { onMount } from 'svelte';
   import Header from '$lib/components/ui/Header.svelte';
   import TitleBar from '$lib/components/ui/TitleBar.svelte';
@@ -11,20 +13,25 @@
   import OutputFormat from '$lib/components/ui/OutputFormat.svelte';
   import WildcardsWindow from '$lib/components/ui/WildcardsWindow.svelte';
   
-  export let data;
+  // Props dari server
+  const props = $props<{ data: any }>();
   
-  let pageData: {
+  // Type untuk proxy
+  type ProxyType = {
+    info: {
+      proxyIP: string;
+      proxyPort: string;
+      country: string;
+      org: string;
+    };
+    urls: string[];
+  };
+  
+  // Type untuk page data
+  type PageDataType = {
     title: string;
     countries: string[];
-    proxies: Array<{
-      info: {
-        proxyIP: string;
-        proxyPort: string;
-        country: string;
-        org: string;
-      };
-      urls: string[];
-    }>;
+    proxies: ProxyType[];
     pagination: {
       currentPage: number;
       totalPages: number;
@@ -33,24 +40,89 @@
     isApiReady: boolean;
   };
   
-  let selectedCountry: string | null = null;
-  let showNotification = false;
-  let showInfoWindow = false;
-  let showOutputWindow = false;
-  let showWildcardsWindow = false;
-  let infoText = "";
-  let rawConfig = "";
+  // Type untuk events
+  type SelectCountryEvent = CustomEvent<{ country: string }>;
+  type CopyEvent = CustomEvent<{ config: string }>;
+  type FormatCopyEvent = CustomEvent<{ format: string }>;
+  type UpdateInfoEvent = CustomEvent<{ text: string }>;
   
-  // Parse data from server
-  $: {
-    try {
-      pageData = JSON.parse(data.html);
-    } catch (e) {
-      console.error("Error parsing data:", e);
+  // State menggunakan runes
+  let pageData = $state<PageDataType | null>(null);
+  let selectedCountry = $state<string | null>(null);
+  let showNotification = $state(false);
+  let showInfoWindow = $state(false);
+  let showOutputWindow = $state(false);
+  let showWildcardsWindow = $state(false);
+  let infoText = $state("");
+  let rawConfig = $state("");
+  
+  // Derived values
+  const filteredProxies = $derived(
+    !pageData ? [] : 
+    !selectedCountry || selectedCountry === 'ALL' ? 
+      pageData.proxies : 
+      pageData.proxies.filter(proxy => proxy.info.country === selectedCountry)
+  );
+  
+  const pageTitle = $derived(
+    pageData ? 
+      selectedCountry && selectedCountry !== 'ALL' ? 
+        `Proxy - ${selectedCountry}` : 
+        pageData.title || 'Nautica VPN' 
+      : 'Nautica VPN'
+  );
+  
+  // Parsing data dari server
+  $effect(() => {
+    if (props.data?.html) {
+      try {
+        pageData = JSON.parse(props.data.html);
+      } catch (e) {
+        console.error("Error parsing data:", e);
+      }
     }
+  });
+  
+  // Debug filter effect
+  $effect(() => {
+    console.log(`Filtered proxies count: ${filteredProxies.length}`);
+    console.log(`Selected country: ${selectedCountry}`);
+  });
+  
+  // Debug dengan tambahan detail
+  $effect(() => {
+    // Tampilkan detail saat filter dan proxy berubah
+    if (selectedCountry) {
+      console.log(`Country Selection detail: ${selectedCountry}`);
+      console.log(`Filtered Proxies detail: ${filteredProxies.length} dari ${pageData?.proxies.length || 0} total proxy`);
+      
+      // Tampilkan beberapa proxy pertama untuk debugging
+      if (filteredProxies.length > 0) {
+        console.log('Sample proxy pertama:', filteredProxies[0].info);
+      }
+    }
+  });
+  
+  function handleSelectCountry(event: SelectCountryEvent) {
+    console.log(`Selected country: ${event.detail.country}`);
+    
+    // Set selected country state
+    selectedCountry = event.detail.country;
+    
+    // Update page title berdasarkan negara yang dipilih
+    if (pageData) {
+      document.title = selectedCountry && selectedCountry !== 'ALL' ? 
+                        `Proxy - ${selectedCountry}` : 
+                        pageData.title || 'Nautica VPN';
+    }
+    
+    // Log jumlah proxy yang tampil setelah filter
+    setTimeout(() => {
+      console.log(`Filtered proxies: ${filteredProxies.length} items`);
+    }, 0);
   }
   
-  function handleCopy(event: CustomEvent<{ config: string }>) {
+  function handleCopy(event: CopyEvent) {
     rawConfig = event.detail.config;
     showOutputWindow = true;
     showInfoWindow = true;
@@ -87,12 +159,11 @@
     }, 2000);
   }
   
-  async function handleFormatCopy(event: CustomEvent<{ format: string }>) {
+  async function handleFormatCopy(event: FormatCopyEvent) {
     const format = event.detail.format;
     infoText = "Generating config...";
     
     try {
-      // TODO: Get the converter URL from config
       const converterUrl = "https://script.google.com/macros/s/AKfycbwwVeHNUlnP92syOP82p1dOk_-xwBgRIxkTjLhxxZ5UXicrGOEVNc5JaSOu0Bgsx_gG/exec";
       
       const res = await fetch(converterUrl, {
@@ -123,7 +194,7 @@
     }
   }
   
-  function handleUpdateInfo(event: CustomEvent<{ text: string }>) {
+  function handleUpdateInfo(event: UpdateInfoEvent) {
     infoText = event.detail.text;
   }
   
@@ -167,28 +238,45 @@
     <CountrySelector 
       countries={pageData.countries} 
       selectedCountry={selectedCountry}
-      on:select={(e) => selectedCountry = e.detail.country}
+      on:select={handleSelectCountry}
     />
     
     <!-- Header -->
-    <Header 
-      autoFetch={true}
-    />
+    <Header />
     
     <!-- Main content -->
-    <div class="container">
-      <TitleBar title={pageData.title} />
+    <div class="container mx-auto px-4 pt-6 ml-64">
+      <TitleBar title={pageTitle} />
+      
+      {#if selectedCountry && selectedCountry !== 'ALL'}
+        <div class="bg-blue-100 dark:bg-blue-900 p-3 rounded-md mb-4 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">{selectedCountry}</span>
+            <span class="text-sm">
+              {filteredProxies.length} proxy ditemukan
+            </span>
+          </div>
+          <button 
+            class="bg-rose-500 hover:bg-rose-600 text-white py-1 px-3 rounded-md text-sm"
+            onclick={() => selectedCountry = 'ALL'}
+          >
+            Reset Filter
+          </button>
+        </div>
+      {/if}
       
       <ProxyList 
-        proxies={pageData.proxies} 
+        proxies={filteredProxies} 
         on:copy={handleCopy}
       />
       
-      <Pagination 
-        currentPage={pageData.pagination.currentPage} 
-        totalPages={pageData.pagination.totalPages} 
-        baseUrl={pageData.pagination.baseUrl}
-      />
+      {#if pageData.pagination}
+        <Pagination 
+          currentPage={pageData.pagination.currentPage} 
+          totalPages={pageData.pagination.totalPages} 
+          baseUrl={pageData.pagination.baseUrl}
+        />
+      {/if}
     </div>
     
     <!-- Modal windows -->
@@ -210,17 +298,12 @@
       on:close={() => showWildcardsWindow = false}
       on:updateInfo={handleUpdateInfo}
     />
-    
-    <!-- Footer -->
-    <Footer 
-      isApiReady={pageData.isApiReady}
-      donateLink="#"
-      on:toggleDarkMode={handleToggleDarkMode}
-      on:toggleWildcards={handleToggleWildcards}
-    />
   </div>
 {:else}
-  <div class="flex justify-center items-center h-screen">
-    <p class="text-2xl dark:text-white">Loading...</p>
+  <div class="flex items-center justify-center h-screen bg-gray-900">
+    <div class="text-center">
+      <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-rose-500 mx-auto mb-4"></div>
+      <p class="text-white">Memuat data...</p>
+    </div>
   </div>
 {/if}

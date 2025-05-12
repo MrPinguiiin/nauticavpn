@@ -1,14 +1,19 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-    import Button from './button/button.svelte';
-    import { Globe, Shield } from '@lucide/svelte';
+  import Button from './button/button.svelte';
+  import { Globe, Shield } from '@lucide/svelte';
   
-  export let ip: string = "127.0.0.1";
-  export let country: string = "Unknown";
-  export let isp: string = "Unknown";
-  export let autoFetch: boolean = true;
+  const runes = true;
   
-  let isLoading = false;
+  // Props dengan runes
+  const props = $props<{ autoFetch?: boolean }>();
+  const autoFetch = props.autoFetch ?? true;
+  
+  // User info state with runes
+  let ip = $state("127.0.0.1");
+  let country = $state("Unknown");
+  let isp = $state("Unknown");
+  let isLoading = $state(false);
   
   // Fungsi untuk mendapatkan info menggunakan server proxy
   async function checkGeoip() {
@@ -16,34 +21,23 @@
     
     isLoading = true;
     
-    // Coba beberapa sumber berbeda
-    await Promise.all([
-      tryDirectIpInfo()
-    ]);
-    
-    isLoading = false;
-  }
-  
-  async function tryDirectIpInfo() {
     try {
       const response = await fetch('https://ipinfo.io/json');
       
       if (response.ok) {
         const data = await response.json();
         
-        // Update nilai
+        // Update nilai dengan data
         ip = data.ip || ip;
         country = data.country || country;
         isp = data.org || isp;
-        
-        return true;
       }
     } catch (err) {
       console.error('Error fetching user info:', err);
+    } finally {
+      isLoading = false;
     }
-    return false;
   }
-  
   
   onMount(() => {
     if (autoFetch) {
@@ -52,7 +46,7 @@
   });
 </script>
 
-<header class="\ border-b border-gray-800">
+<header class="border-b border-gray-800">
   <div class="container mx-auto px-4 py-3 flex justify-between items-center">
     <div class="flex items-center gap-2">
       <Shield class="h-6 w-6 text-rose-500" />
@@ -69,6 +63,15 @@
         <span>•</span>
         <span>ISP: {isp}</span>
       </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        class="text-rose-500 hover:text-rose-400"
+        onclick={checkGeoip}
+      >
+        <Globe class="h-4 w-4 mr-2" />
+        {isLoading ? 'Refreshing...' : 'Refresh'}
+      </Button>
     </div>
   </div>
 </header>
